@@ -2,11 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://coins.llama.fi https://api.kraken.com https://api.bybit.com https://api.coingecko.com https://api.alternative.me https://api.coinbase.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Buy-the-Fear</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+  @font-face{font-family:'Silkscreen';src:url(../fonts/silkscreen-400.woff) format('woff');font-weight:400;font-display:swap}
+  @font-face{font-family:'Silkscreen';src:url(../fonts/silkscreen-700.woff) format('woff');font-weight:700;font-display:swap}
+  @font-face{font-family:'JetBrains Mono';src:url(../fonts/jetbrainsmono.woff) format('woff');font-weight:100 800;font-display:swap}
+  @font-face{font-family:'Space Grotesk';src:url(../fonts/spacegrotesk.woff) format('woff');font-weight:300 700;font-display:swap}
   /* NEON TERMINAL — futuristic HUD with 8-bit accents. Pixel font only for labels; numbers stay in a clean mono. */
   :root{
     --bg:#06080e; --card:#0c111c; --card2:#090e17; --border:#1a2740; --edge:#0f1a2c; --fg:#e8eefc; --dim:#8090ad;
@@ -634,6 +638,11 @@
 
 <script src="xmr-history.js"></script>
 <script>
+
+// ---- hardening: everything that comes from outside is treated as untrusted text
+const SAFE_ID=/^[a-z0-9][a-z0-9-]{0,63}$/;
+function cleanSym(x){return String(x||'').replace(/[^A-Za-z0-9]/g,'').slice(0,12).toUpperCase();}
+function cleanTxt(x){return String(x==null?'':x).replace(/[<>&"'`\\]/g,'').slice(0,80);}
 // ---------- universe: the live top 10 by market cap (no stablecoins / wrapped / tokenized assets) + anything you hold ----------
 // Fallback until CoinGecko answers: CoinGecko top 10 as checked on 14 Nov 2026.
 const ATH = { bitcoin:126080, ethereum:4946, solana:293.31, monero:798, zcash:3191.93, hyperliquid:97.96 };
@@ -646,8 +655,8 @@ function setUniverse(top){ // top: [{id,sym,rank}] already filtered, in rank ord
   const N=Math.max(1,s.rankGuard||10),keep=top.slice(0,N);
   const held=new Set((typeof trades!=='undefined'?trades:[]).map(t=>t.asset));
   for(const k of Object.keys(CFG))delete CFG[k];
-  keep.forEach((c,i)=>{CFG[c.id]={alloc:0.9/keep.length,buy:null,bail:null};NAME[c.id]=c.sym.toUpperCase();ROLE[c.id]='#'+(c.rank||i+1);if(!BYBIT_SYM[c.id])BYBIT_SYM[c.id]=c.sym.toUpperCase()+'USDT';});
-  for(const id of held){if(CFG[id])continue;const pos=(typeof ladderPos==='function')?ladderPos(id):null;if(!pos)continue;CFG[id]={alloc:0,buy:null,bail:null};NAME[id]=NAME[id]||id.slice(0,5).toUpperCase();const rk=geckoCache.rank&&geckoCache.rank[id];ROLE[id]='held · '+(rk?'#'+rk:'out of top 120');}
+  keep.forEach((c,i)=>{CFG[c.id]={alloc:0.9/keep.length,buy:null,bail:null};NAME[c.id]=cleanSym(c.sym);ROLE[c.id]='#'+(c.rank||i+1);if(!BYBIT_SYM[c.id])BYBIT_SYM[c.id]=c.sym.toUpperCase()+'USDT';});
+  for(const id of held){if(CFG[id]||!SAFE_ID.test(String(id)))continue;const pos=(typeof ladderPos==='function')?ladderPos(id):null;if(!pos)continue;CFG[id]={alloc:0,buy:null,bail:null};NAME[id]=NAME[id]||id.slice(0,5).toUpperCase();const rk=geckoCache.rank&&geckoCache.rank[id];ROLE[id]='held · '+(rk?'#'+rk:'out of top 120');}
   IDS=Object.keys(CFG).join(',');
   const sig=IDS;if(sig!==universeSig){const first=!universeSig;universeSig=sig;if(!first){btData=null;btState=null;}if(typeof fillAssetSelects==='function')fillAssetSelects();}
 }
@@ -670,7 +679,7 @@ let trades=[], history=[], review={date:null,checks:{}};
 let regime={stable:null,stableChg:null,funding:null};
 let focus=[];
 
-function getJSON(url,ms=9000){return new Promise((res,rej)=>{const c=new AbortController();const t=setTimeout(()=>{c.abort();rej(new Error("timeout"));},ms);fetch(url,{signal:c.signal,cache:"no-store"}).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}).then(j=>{clearTimeout(t);res(j);}).catch(e=>{clearTimeout(t);rej(e);});});}
+function getJSON(url,ms=9000){return new Promise((res,rej)=>{const c=new AbortController();const t=setTimeout(()=>{c.abort();rej(new Error("timeout"));},ms);fetch(url,{signal:c.signal,cache:"no-store",credentials:"omit",referrerPolicy:"no-referrer"}).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}).then(j=>{clearTimeout(t);res(j);}).catch(e=>{clearTimeout(t);rej(e);});});}
 function fmtUSD(n){if(n==null)return "—";if(n>=1e12)return "$"+(n/1e12).toFixed(2)+"T";if(n>=1e9)return "$"+(n/1e9).toFixed(1)+"B";if(n>=1e6)return "$"+(n/1e6).toFixed(1)+"M";return "$"+n.toLocaleString(undefined,{maximumFractionDigits:2});}
 function money(n){return "$"+(n||0).toLocaleString(undefined,{maximumFractionDigits:0});}
 function pct(v){if(v==null)return "—";return (v>0?"+":"")+v.toFixed(1)+"%";}
@@ -794,7 +803,7 @@ const SRC_INFO={
 const NON_CRYPTO=/usd|tether|\bdai\b|wrapped|staked|bridged|restak|liquid-staked|liquid staked|gold|xaut|paxg|heloc|treasury|fund|yield|euro|eurc|bfusd|usds|usde|syrup|ondo-us/i;
 const NON_CRYPTO_SYM=new Set(['usdt','usdc','dai','usde','usds','fdusd','pyusd','usd1','rlusd','usdg','usyc','usdy','buidl','wbtc','weth','steth','wsteth','cbbtc','xaut','paxg','figr_heloc','eursafo','susds','usdtb','tusd','busd']);
 let srcHealth={},geckoCache={ts:0,markets:null,global:null},audRate=null,priceDetail={},oi=null;
-async function timed(key,fn){const t=performance.now();try{const v=await fn();srcHealth[key]={ok:true,ms:Math.round(performance.now()-t),at:Date.now(),n:v&&v.n};return v;}catch(e){srcHealth[key]=Object.assign({},srcHealth[key]||{},{ok:false,ms:Math.round(performance.now()-t),err:String(e&&e.message||e).slice(0,60)});return null;}}
+async function timed(key,fn){const t=performance.now();try{const v=await fn();srcHealth[key]={ok:true,ms:Math.round(performance.now()-t),at:Date.now(),n:v&&v.n};return v;}catch(e){srcHealth[key]=Object.assign({},srcHealth[key]||{},{ok:false,ms:Math.round(performance.now()-t),err:cleanTxt(e&&e.message||e).slice(0,60)});return null;}}
 async function srcLlama(){const r=await getJSON('https://coins.llama.fi/prices/current/'+Object.keys(CFG).map(i=>'coingecko:'+i).join(','));const m={};for(const id of Object.keys(CFG)){const c=r.coins&&r.coins['coingecko:'+id];if(c&&c.price)m[id]={price:c.price};}if(!Object.keys(m).length)throw new Error('empty');return{map:m,n:Object.keys(m).length};}
 async function srcKraken(){const r=await getJSON('https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD,XMRUSD,NEARUSD,ZECUSD,XRPUSD,ADAUSD,XDGUSD,TRXUSD,USDTAUD');if(!r.result)throw new Error((r.error||['no result'])[0]);const m={};let aud=null;
   for(const [k,v] of Object.entries(r.result)){if(k==='USDTAUD'){aud=+v.c[0];continue;}const id=KRAKEN_KEYS[k];if(id){const last=+v.c[0],open=+v.o;m[id]={price:last,chg24h:open?((last/open-1)*100):null};}}
@@ -805,11 +814,12 @@ async function srcGecko(){
   let m;try{m=await getJSON("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false&price_change_percentage=24h%2C7d%2C30d%2C1y");}catch(e){geckoCache.ts=Date.now()-GECKO_EVERY+60000;throw e;}
   const map={},stab=[],rank={},top=[];let k=0;
   for(const c of m){
+    if(!c||!SAFE_ID.test(String(c.id)))continue;
     if(c.id==='tether'||c.id==='usd-coin')stab.push(c);
     map[c.id]={price:c.current_price,chg24h:c.price_change_percentage_24h,chg7d:c.price_change_percentage_7d_in_currency,chg30d:c.price_change_percentage_30d_in_currency,chg1y:c.price_change_percentage_1y_in_currency};
     if(c.ath)ATH[c.id]=c.ath;
     if(NON_CRYPTO.test(c.id+' '+c.name)||NON_CRYPTO_SYM.has((c.symbol||'').toLowerCase()))continue;
-    k++;rank[c.id]=k;top.push({id:c.id,sym:c.symbol,rank:k});
+    k++;rank[c.id]=k;top.push({id:c.id,sym:cleanSym(c.symbol),rank:k});
   }
   let g=null;try{g=await getJSON("https://api.coingecko.com/api/v3/global");}catch(e){}
   geckoCache={ts:Date.now(),markets:map,stable:stab,global:g&&g.data?g.data:geckoCache.global,rank,top};
@@ -839,7 +849,7 @@ async function fetchPrices(){
 }
 function priceConfidence(id){const d=priceDetail[id];if(!d)return'no price';if(d.n<2)return'single source';if(d.spread!=null&&d.spread>1.5)return'sources disagree '+d.spread.toFixed(1)+'%';return null;}
 async function fetchFng(){
-  const f=await timed('altme',async()=>{const r=await getJSON("https://api.alternative.me/fng/?limit=1");if(!r.data||!r.data[0])throw new Error('no data');return{value:parseInt(r.data[0].value,10),cls:r.data[0].value_classification,n:1};});
+  const f=await timed('altme',async()=>{const r=await getJSON("https://api.alternative.me/fng/?limit=1");if(!r.data||!r.data[0])throw new Error('no data');return{value:parseInt(r.data[0].value,10),cls:cleanTxt(r.data[0].value_classification),n:1};});
   const g=geckoCache.global;
   if(f)return{value:f.value,cls:f.cls,dom:g?g.market_cap_percentage.btc:null,mcap:g?g.total_market_cap.usd:null,src:"alternative.me"};
   return null;
@@ -886,7 +896,7 @@ async function mhLoad(){
   if(mh.loading||(mh.data&&Date.now()-mh.ts<3600e3))return;mh.loading=true;
   try{
     const [f,k]=await Promise.all([getJSON('https://api.alternative.me/fng/?limit=760',15000),getJSON('https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=D&limit=1000',15000)]);
-    const F={};for(const d of f.data||[]){const v=+d.value;F[new Date(+d.timestamp*1000).toISOString().slice(0,10)]={v,c:d.value_classification||(v<=25?'Extreme Fear':v<45?'Fear':v<=55?'Neutral':v<75?'Greed':'Extreme Greed')};}
+    const F={};for(const d of f.data||[]){const v=+d.value;F[new Date(+d.timestamp*1000).toISOString().slice(0,10)]={v,c:cleanTxt(d.value_classification)||(v<=25?'Extreme Fear':v<45?'Fear':v<=55?'Neutral':v<75?'Greed':'Extreme Greed')};}
     const K=(k.result&&k.result.list||[]).map(a=>({t:+a[0],h:+a[2],c:+a[4]})).sort((x,y)=>x.t-y.t);
     let ath=0;const rows=[];
     for(const r of K){ath=Math.max(ath,r.h);const d=new Date(r.t).toISOString().slice(0,10);if(F[d])rows.push({d,t:r.t,f:F[d].v,fc:F[d].c,p:r.c,ath});}
@@ -1143,7 +1153,7 @@ function renderTrades(){
   sumEl.innerHTML=`<div>Bought <b>${money(buyUsd)}</b></div><div>Sold <b>${money(sellUsd)}</b></div><div>Net cash in <b>${money(netIn)}</b></div><div>Holdings value <b>${money(curVal)}</b></div><div>Unrealised P/L <b class="${pl>=0?'pos':'neg'}">${money(pl)} (${plPct>=0?'+':''}${plPct.toFixed(1)}%)</b></div>`;
 }
 // ---------- trade log ----------
-function loadTrades(){try{trades=JSON.parse(localStorage.getItem('qm_trades')||'[]');}catch(e){trades=[];}}
+function loadTrades(){try{const a=JSON.parse(localStorage.getItem('qm_trades')||'[]');trades=Array.isArray(a)?a.filter(t=>t&&SAFE_ID.test(String(t.asset))&&(t.side==='buy'||t.side==='sell')&&isFinite(+t.units)&&+t.units>0&&isFinite(+t.price)&&+t.price>0&&/^\d{4}-\d{2}-\d{2}$/.test(String(t.date))&&t.id!=null).map(t=>({id:cleanTxt(t.id),date:t.date,asset:t.asset,side:t.side,units:+t.units,price:+t.price,usd:+t.usd||t.units*t.price})):[];}catch(e){trades=[];}}
 function saveTrades(){try{localStorage.setItem('qm_trades',JSON.stringify(trades));}catch(e){}if(geckoCache.top)setUniverse(geckoCache.top);syncAll();}
 function fillAssetSelects(){const sel=document.getElementById('tAsset');if(!sel)return;const cur=sel.value;sel.innerHTML=Object.keys(CFG).map(id=>`<option value="${id}">${NAME[id]}</option>`).join("");if(cur&&CFG[cur])sel.value=cur;if(typeof btPopulateAssets==='function')try{btPopulateAssets();}catch(e){}}
 function initTradeForm(){
@@ -1163,7 +1173,7 @@ function addTrade(){
 }
 async function syncExport(){const t=JSON.stringify(trades);const el=document.getElementById('syncIO');el.value=t;try{await navigator.clipboard.writeText(t);document.getElementById('syncMsg').textContent='copied';}catch(e){el.select();document.getElementById('syncMsg').textContent='selected — press Ctrl+C';}}
 function syncImport(){const m=document.getElementById('syncMsg');try{const a=JSON.parse(document.getElementById('syncIO').value);if(!Array.isArray(a))throw 0;const have=new Set(trades.map(t=>t.id));let n=0;
-  for(const t of a)if(t&&t.id&&t.asset&&t.side&&!have.has(t.id)){trades.push({id:t.id,date:t.date,asset:t.asset,side:t.side,units:+t.units,price:+t.price,usd:+t.usd||t.units*t.price});n++;}
+  for(const t of a)if(t&&SAFE_ID.test(String(t.asset))&&(t.side==='buy'||t.side==='sell')&&isFinite(+t.units)&&+t.units>0&&isFinite(+t.price)&&+t.price>0&&/^\d{4}-\d{2}-\d{2}$/.test(String(t.date))&&t.id!=null&&!have.has(cleanTxt(t.id))){trades.push({id:cleanTxt(t.id),date:t.date,asset:t.asset,side:t.side,units:+t.units,price:+t.price,usd:+t.usd||t.units*t.price});n++;}
   saveTrades();renderTrades();if(typeof load==='function')load();m.textContent='imported '+n;}catch(e){m.textContent='not valid journal JSON';}}
 function delTrade(t){trades=trades.filter(x=>x.id!==t);saveTrades();renderTrades();}
 function clearTrades(){if(confirm("Delete all logged trades? (does not affect the exchange)")){trades=[];saveTrades();renderTrades();}}
