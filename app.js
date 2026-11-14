@@ -86,7 +86,7 @@ function render(){
   else if(buys.length){t='BUY TRANCHE — '+buys.map(i=>COINS[i].n).join(', ');w='Extreme fear and these coins are '+S.deep+'%+ below their highs.';col='var(--green)';}
   else if(f<=S.buy){t='FEAR — NOTHING DEEP ENOUGH';w='Fear trigger is on, but no allocated coin is '+S.deep+'%+ below its high.';col='var(--amber)';}
   else{t=f<=S.buy+15?'FEAR BUILDING — WAIT':'NO TRIGGER — WAIT';w='Buy only at F&G ≤ '+S.buy+' on coins '+S.deep+'%+ below their highs.';col='var(--dim)';}
-  $('hT').textContent=t;$('hW').classList.toggle('amt',sells.length>0);$('hT').style.color=col;$('hW').textContent=w;$('hero').style.borderColor=col;
+  $('hT').textContent=t;if($('hW'))$('hW').classList.toggle('amt',sells.length>0);$('hT').style.color=col;$('hW').textContent=w;$('hero').style.borderColor=col;
   if(fng){$('fngN').textContent=fng.v;$('fngM').style.left=fng.v+'%';$('fngC').textContent=fng.c+' · alternative.me';}
   const parts=[];
   if(sells.length)parts.push(sells.map(i=>COINS[i].n+': '+sig[i].l.toLowerCase()).join(' · '));
@@ -153,11 +153,11 @@ installUI();
   if(window.top!==window.self){document.body.innerHTML='';try{window.top.location=window.location.href;}catch(e){}}
   // 2. warn if opened from anywhere but the official address (copycat / phishing copies)
   const OFFICIAL='quinnsteam343.github.io',h=location.hostname;
-  if(h&&h!==OFFICIAL&&h!=='localhost'&&h!=='127.0.0.1'){const w=$('originWarn');w.style.display='';w.textContent='⚠ This is not the official Fear Ladder address. Only use https://'+OFFICIAL+'/fear-ladder/ — don’t enter anything here.';}
+  if(h&&h!==OFFICIAL&&h!=='localhost'&&h!=='127.0.0.1'){const w=$('originWarn');if(w){w.style.display='';w.textContent='⚠ This is not the official Fear Ladder address. Only use https://'+OFFICIAL+'/fear-ladder/ — don’t enter anything here.';}else document.title='⚠ '+document.title;}
   // 3. ask the phone to keep this app's storage (journal) instead of clearing it
   if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
   // 4. hide-amounts toggle (remembered on this phone)
-  const pb=$('privBtn'),setPriv=on=>{document.body.classList.toggle('priv',on);pb.classList.toggle('on',on);pb.setAttribute('aria-pressed',on?'true':'false');ls.set('fl_priv',on);};
-  setPriv(!!ls.get('fl_priv',false));pb.addEventListener('click',()=>{setPriv(!document.body.classList.contains('priv'));toast(document.body.classList.contains('priv')?'AMOUNTS HIDDEN':'AMOUNTS SHOWN');});
+  const pb=$('privBtn');if(pb){const setPriv=on=>{document.body.classList.toggle('priv',on);pb.classList.toggle('on',on);pb.setAttribute('aria-pressed',on?'true':'false');ls.set('fl_priv',on);};
+  setPriv(!!ls.get('fl_priv',false));pb.addEventListener('click',()=>{setPriv(!document.body.classList.contains('priv'));toast(document.body.classList.contains('priv')?'AMOUNTS HIDDEN':'AMOUNTS SHOWN');});}
 }
 }
