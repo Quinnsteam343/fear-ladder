@@ -43,11 +43,12 @@ async function fetchAll(){
     src('Kraken',async()=>{const r=await get('https://api.kraken.com/0/public/Ticker?pair='+ids.filter(i=>COINS[i].kr).map(i=>COINS[i].kr).join(',')+',USDTAUD');const m={};
       for(const [k,v] of Object.entries(r.result||{})){if(k==='USDTAUD'){aud=+v.c[0];continue;}const i=KRK[k];if(i)m[i]={p:+v.c[0],c:+v.o?((+v.c[0]/+v.o-1)*100):null};}if(!Object.keys(m).length)throw new Error('empty');return m;}),
     src('Bybit',async()=>{const m={};await Promise.all(ids.filter(i=>COINS[i].by).map(async i=>{try{const t=(await get('https://api.bybit.com/v5/market/tickers?category=spot&symbol='+COINS[i].by)).result.list[0];m[i]={p:+t.lastPrice,c:+t.price24hPcnt*100};}catch(e){}}));if(!Object.keys(m).length)throw new Error('empty');return m;}),
-    src('alternative.me',async()=>{const d=(await get('https://api.alternative.me/fng/?limit=1')).data[0];return{v:+d.value,c:cleanTxt(d.value_classification)};})
+    src('alternative.me',async()=>{const d=(await get('https://api.alternative.me/fng/?limit=1')).data[0];const v=Number(d.value);if(!Number.isInteger(v)||v<0||v>100)throw new Error('implausible F&G value');return{v,c:cleanTxt(d.value_classification)};})
   ]);
   if(fg)fng=fg;
   for(const i of ids){const v=[ll,kr,by].map(s=>s&&s[i]&&s[i].p).filter(Boolean);if(!v.length)continue;
-    const m=med(v);P[i]={p:m,n:v.length,spread:v.length>1?(Math.max(...v)-Math.min(...v))/m*100:null,c:(by&&by[i]&&by[i].c!=null)?by[i].c:(kr&&kr[i]?kr[i].c:null)};
+    const m=med(v),prev=P[i];const jump=prev&&prev.p&&prev.t&&(Date.now()-prev.t<15*60e3)&&Math.abs(m/prev.p-1)>0.4;
+    P[i]={t:Date.now(),jump:!!jump,p:m,n:v.length,spread:v.length>1?(Math.max(...v)-Math.min(...v))/m*100:null,c:(by&&by[i]&&by[i].c!=null)?by[i].c:(kr&&kr[i]?kr[i].c:null)};
     if(m>ATH[i])ATH[i]=m;}
 
 }
@@ -60,6 +61,7 @@ function position(id){
   const sold=bu?su/bu:0;return{u,avg:bc/bu,n:b.length,last:b[b.length-1],stage:sold>=.64?2:sold>=.31?1:0};
 }
 function signal(id){
+  if(P[id]&&P[id].jump)return{l:'PAUSED',k:'b-hold',w:'price moved more than 40% in minutes — waiting for it to confirm before signalling'};
   const c=COINS[id],q=P[id],p=q&&q.p,f=fng?fng.v:null,T=[S.l1,S.l2,S.l3];
   if(p==null||f==null)return{l:'NO DATA',k:'b-hold',w:'waiting for prices'};
   const dd=(p/ATH[id]-1)*100,deep=dd<=-S.deep,pos=position(id),warn=q.n<2?' · ⚠ single source':(q.spread>1.5?' · ⚠ sources disagree '+q.spread.toFixed(1)+'%':'');
@@ -84,7 +86,7 @@ function render(){
   else if(buys.length){t='BUY TRANCHE — '+buys.map(i=>COINS[i].n).join(', ');w='Extreme fear and these coins are '+S.deep+'%+ below their highs.';col='var(--green)';}
   else if(f<=S.buy){t='FEAR — NOTHING DEEP ENOUGH';w='Fear trigger is on, but no allocated coin is '+S.deep+'%+ below its high.';col='var(--amber)';}
   else{t=f<=S.buy+15?'FEAR BUILDING — WAIT':'NO TRIGGER — WAIT';w='Buy only at F&G ≤ '+S.buy+' on coins '+S.deep+'%+ below their highs.';col='var(--dim)';}
-  $('hT').textContent=t;$('hT').style.color=col;$('hW').textContent=w;$('hero').style.borderColor=col;
+  $('hT').textContent=t;$('hW').classList.toggle('amt',sells.length>0);$('hT').style.color=col;$('hW').textContent=w;$('hero').style.borderColor=col;
   if(fng){$('fngN').textContent=fng.v;$('fngM').style.left=fng.v+'%';$('fngC').textContent=fng.c+' · alternative.me';}
   const parts=[];
   if(sells.length)parts.push(sells.map(i=>COINS[i].n+': '+sig[i].l.toLowerCase()).join(' · '));
@@ -97,7 +99,7 @@ function render(){
       '<div><div class="px">'+usd(q.p)+'</div><div class="aud">'+(q.p&&aud?'A$'+(q.p*aud).toLocaleString(undefined,{maximumFractionDigits:q.p*aud<10?3:2}):'')+' <span class="'+(q.c>=0?'pos':'neg')+'">'+(q.c!=null?pc(q.c):'')+'</span></div></div>'+
       '<div><span class="badge '+s.k+'">'+s.l+'</span></div><div class="aud" style="align-self:center">'+(dd!=null?dd.toFixed(0)+'% ATH':'')+'</div>'+
       '<div class="depth" aria-hidden="true"><div class="track"></div><div class="zone" style="left:auto;right:0;width:'+zone+'%;border-right:0;border-left:2px solid var(--green)"></div><div class="me" style="left:'+meX+'%"></div><span class="t1">−'+S.deep+'%</span></div>'+
-      '<div class="why">'+s.w+'</div>'+lad+'</div>';}).join('');
+      '<div class="why'+(s.pos?' amt':'')+'">'+s.w+'</div>'+(lad?lad.replace('class="ladder"','class="ladder amt"'):'')+'</div>';}).join('');
   const ok=Object.values(health).filter(h=>h.ok).length,tot=Object.keys(health).length;
   $('dot').className='dot'+(ok<2?' bad':'');$('stTxt').textContent=ok+'/'+tot+' live · '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   $('foot').textContent=aud?'AUD '+aud.toFixed(3)+' per USD · Kraken':'';
@@ -107,7 +109,7 @@ function render(){
 
 function renderJournal(){
   const L=J.slice().sort((a,b)=>a.date<b.date?1:-1);
-  $('jList').innerHTML=L.length?L.map(t=>'<div class="tr"><span class="badge '+(t.side==='buy'?'b-buy':'b-sell')+'">'+t.side.toUpperCase()+'</span><div><b>'+(COINS[t.asset]?COINS[t.asset].n:t.asset)+'</b> '+(+t.units).toLocaleString(undefined,{maximumFractionDigits:6})+' @ '+usd(t.price)+'<div class="d">'+t.date+' · '+usd(t.usd)+'</div></div><button class="x" data-del="'+t.id+'" aria-label="Delete">×</button></div>').join(''):'<div class="muted" style="padding:10px 0">No trades yet. Log each buy and sell so the ladder knows your average price.</div>';
+  $('jList').innerHTML=L.length?L.map(t=>'<div class="tr"><span class="badge '+(t.side==='buy'?'b-buy':'b-sell')+'">'+t.side.toUpperCase()+'</span><div><b>'+(COINS[t.asset]?COINS[t.asset].n:t.asset)+'</b> <span class="amt">'+(+t.units).toLocaleString(undefined,{maximumFractionDigits:6})+' @ '+usd(t.price)+'</span><div class="d">'+t.date+' · <span class="amt">'+usd(t.usd)+'</span></div></div><button class="x" data-del="'+t.id+'" aria-label="Delete">×</button></div>').join(''):'<div class="muted" style="padding:10px 0">No trades yet. Log each buy and sell so the ladder knows your average price.</div>';
 }
 function prefill(){const a=$('jA').value;if(P[a])$('jP').value=+P[a].p.toPrecision(6);preview();}
 function preview(){const u=+$('jU').value,p=+$('jP').value;$('jPrev').textContent=u&&p?'Total '+usd(u*p):'';}
@@ -132,7 +134,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)cycle();})
 fillS();renderJournal();cycle();setInterval(()=>{if(!document.hidden)cycle();},60000);
 if('serviceWorker' in navigator&&isSecureContext&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 // ---- install helpers: Android (Chrome install prompt) and iPhone (Safari: Share → Add to Home Screen)
-const APP_VERSION='1.0.1';$('ver').textContent='v'+APP_VERSION;
+const APP_VERSION='1.0.2';$('ver').textContent='v'+APP_VERSION;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let deferred=null;
@@ -145,4 +147,17 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;install
 addEventListener('appinstalled',()=>{deferred=null;toast('INSTALLED');installUI();});
 $('installBtn').addEventListener('click',async()=>{if(!deferred)return;deferred.prompt();try{await deferred.userChoice;}catch(e){}deferred=null;installUI();});
 installUI();
+
+// ---- extra protections (v1.0.2)
+{ // 1. refuse to run inside someone else's page (click-jacking)
+  if(window.top!==window.self){document.body.innerHTML='';try{window.top.location=window.location.href;}catch(e){}}
+  // 2. warn if opened from anywhere but the official address (copycat / phishing copies)
+  const OFFICIAL='quinnsteam343.github.io',h=location.hostname;
+  if(h&&h!==OFFICIAL&&h!=='localhost'&&h!=='127.0.0.1'){const w=$('originWarn');w.style.display='';w.textContent='⚠ This is not the official Fear Ladder address. Only use https://'+OFFICIAL+'/fear-ladder/ — don’t enter anything here.';}
+  // 3. ask the phone to keep this app's storage (journal) instead of clearing it
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+  // 4. hide-amounts toggle (remembered on this phone)
+  const pb=$('privBtn'),setPriv=on=>{document.body.classList.toggle('priv',on);pb.classList.toggle('on',on);pb.setAttribute('aria-pressed',on?'true':'false');ls.set('fl_priv',on);};
+  setPriv(!!ls.get('fl_priv',false));pb.addEventListener('click',()=>{setPriv(!document.body.classList.contains('priv'));toast(document.body.classList.contains('priv')?'AMOUNTS HIDDEN':'AMOUNTS SHOWN');});
+}
 }

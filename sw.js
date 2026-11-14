@@ -1,5 +1,5 @@
 // Fear Ladder service worker. Bump VERSION on every release so phones pick up the new files.
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const CACHE = 'fear-ladder-' + VERSION;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './favicon-32.png', './app.js', './fonts/silkscreen-400.woff', './fonts/silkscreen-700.woff', './fonts/jetbrainsmono.woff', './fonts/spacegrotesk.woff'];
 

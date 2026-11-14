@@ -849,7 +849,7 @@ async function fetchPrices(){
 }
 function priceConfidence(id){const d=priceDetail[id];if(!d)return'no price';if(d.n<2)return'single source';if(d.spread!=null&&d.spread>1.5)return'sources disagree '+d.spread.toFixed(1)+'%';return null;}
 async function fetchFng(){
-  const f=await timed('altme',async()=>{const r=await getJSON("https://api.alternative.me/fng/?limit=1");if(!r.data||!r.data[0])throw new Error('no data');return{value:parseInt(r.data[0].value,10),cls:cleanTxt(r.data[0].value_classification),n:1};});
+  const f=await timed('altme',async()=>{const r=await getJSON("https://api.alternative.me/fng/?limit=1");if(!r.data||!r.data[0])throw new Error('no data');{const v=Number(r.data[0].value);if(!Number.isInteger(v)||v<0||v>100)throw new Error('implausible F&G value');}return{value:parseInt(r.data[0].value,10),cls:cleanTxt(r.data[0].value_classification),n:1};});
   const g=geckoCache.global;
   if(f)return{value:f.value,cls:f.cls,dom:g?g.market_cap_percentage.btc:null,mcap:g?g.total_market_cap.usd:null,src:"alternative.me"};
   return null;
@@ -2225,6 +2225,8 @@ window.addEventListener('storage',e=>{ // another window/tab of this dashboard c
   if(e.key==='qm_trades'){loadTrades();if(geckoCache.top)setUniverse(geckoCache.top);}
   else if(e.key===BT_FLAG_KEY)btLoadFlags();else if(e.key==='qm_review')loadReview();else return;
   syncAll();});
+// refuse to run inside someone else's page (click-jacking)
+if(window.top!==window.self){document.body.innerHTML='';try{window.top.location=window.location.href;}catch(e){}}
 // ---------- main ----------
 async function load(){
   stale=false;
